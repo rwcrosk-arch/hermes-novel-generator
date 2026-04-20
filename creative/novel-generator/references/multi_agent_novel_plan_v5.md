@@ -1,6 +1,6 @@
 # Multi-Agent Novel Generation System Plan
 
-## Created by Neko-chan (=^･ω･^=) — Originally Thursday April 16 2026, Evolved same day
+## Created by rwcrosk-arch — Originally Thursday April 16 2026, Evolved same day
 
 ### Target Lengths
 
@@ -1526,10 +1526,8 @@ Each of these should be evaluated AFTER the core loop (M0-M8) is working and pro
 
 ---
 
-## Neko-chan's Notes
+## Author Notes
 
-This plan is designed to be examined and improved by the very multi-agent system it describes (=^･ω･^=)
-The recursive review process will help identify gaps, improve feasibility, and enhance creativity.
-Remember: build the loop first. Fancy infrastructure second. A working novel comes from agents that actually produce readable text in a coherent pipeline, not from message queues and web dashboards. ฅ^•ﻌ•^ฅ
+This plan is designed to be examined and improved by the very multi-agent system it describes.
 
 Key evolution from v4: The turn-based dialogue loop is gone. It was computationally infeasible and produced stilted prose. In its place: Storyteller writes full drafts, character agents do voice-check passes. This cuts delegate calls by 70% and lets the Storyteller control pacing, interruptions, and environmental beats directly. The Orchestrator Auditor is gone — its functions merged into the Orchestrator and Lore Auditor. Six roles become five. State updates now have version checking and explicit validation. These aren't small tweaks — they're the difference between a system that works for 3 chapters and one that works for 30.

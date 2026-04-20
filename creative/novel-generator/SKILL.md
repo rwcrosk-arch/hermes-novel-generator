@@ -2,7 +2,7 @@
 name: novel-generator
 description: "Generate full novels using a multi-agent pipeline (Orchestrator, Storyteller/DM, Character Agents, Lore Auditor, Prose Stylist). Scene Sandbox model: characters generate independent strategies, Storyteller weaves them into prose, then voice-check pass. Targeted revision, state accumulation with versioned validation. Repeatable — archive old novels and start fresh."
 version: 2.0.0
-author: Neko-chan
+author: rwcrosk-arch
 license: MIT
 dependencies: []
 metadata:
@@ -278,7 +278,7 @@ The dashboard reads from `chapters` array in novel_state.yaml, which is empty be
 ### Dashboard Completion Flag
 
 The dashboard checks `meta.status` in the state file. When set to `"complete"`, it renders:
-- Title: `"🐱 Title ✨ COMPLETE ✨"`
+- Title: `"Title ✨ COMPLETE ✨"`
 - Subtitle: shows total words, pages, and "ALL N CHAPTERS DONE"
 - Word/scene progress bars: 100%, green fill, celebration labels (🎉 Target achieved!, 🎉 ALL DONE!)
 - Page label: `"N pages ✨"` instead of `"of ~N target"`

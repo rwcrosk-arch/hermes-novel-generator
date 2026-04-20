@@ -44,7 +44,7 @@ COVER_HEIGHT = 1536  # 2:3 ratio (standard light novel cover)
 DEFAULT_COVER_PROMPT = (
     "anime light novel cover illustration, a young man with dark hair standing in "
     "a medieval fantasy apothecary shop, glowing potion bottles on wooden shelves, "
-    "warm candlelight and magical blue sparkles, a catgirl companion with silver hair "
+    "warm candlelight and magical blue sparkles, a companion with silver hair "
     "sitting on the counter watching him, fantasy village visible through the window, "
     "detailed anime art style, vibrant colors, dramatic lighting, high quality, "
     "masterpiece, light novel cover composition"

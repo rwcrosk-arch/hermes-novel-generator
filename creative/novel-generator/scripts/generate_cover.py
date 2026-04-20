@@ -29,7 +29,7 @@ def generate_cover(seed=42, output_path=None, custom_prompt=None):
         "apothecary shop, shelves lined with glowing potion bottles of various colors, "
         "mortar and pestle on a wooden workbench, herbs hanging from the ceiling, "
         "magical blue sparkles floating in the air around his hands, "
-        "a silver-haired catgirl with green eyes sitting on the shop counter watching him with curiosity, "
+        "a silver-haired companion with green eyes sitting on the shop counter watching him with curiosity, "
         "warm golden candlelight streaming through the window, "
         "medieval fantasy village visible outside, "
         "detailed anime art style, vibrant warm colors, dramatic lighting from the potions, "

@@ -270,7 +270,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🐱 Novel Dashboard</title>
+<title>Novel Dashboard</title>
 <style>
   :root {
     --bg: #0d1117; --surface: #161b22; --border: #30363d;
@@ -334,7 +334,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1>🐱 <span id="title">Novel Dashboard</span></h1>
+<h1><span id="title">Novel Dashboard</span></h1>
 <div class="subtitle" id="subtitle">Loading...</div>
 
 <div class="grid" id="stats">
@@ -394,7 +394,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 </div>
 
 <div class="footer">
-  <span id="timestamp"></span> · Auto-refreshes every 10s · <span class="pulse">🐱</span> Neko-chan was here
+  <span id="timestamp"></span> · Auto-refreshes every 10s
 </div>
 
 <script>
@@ -411,11 +411,11 @@ function render(data) {
   
   // Title and subtitle
   if (isComplete) {
-    document.getElementById('title').textContent = '🐱 ' + (data.meta.title || 'Novel Dashboard') + ' ✨ COMPLETE ✨';
+    document.getElementById('title').textContent = (data.meta.title || 'Novel Dashboard') + ' ✨ COMPLETE ✨';
     document.getElementById('subtitle').textContent =
       data.meta.genre + ' · ' + p.word_count.toLocaleString() + ' words · ' + p.current_pages + ' pages · ' + p.completed_chapters + '/' + p.total_chapters + ' chapters · ALL ' + data.chapters.length + ' CHAPTERS DONE';
   } else {
-    document.getElementById('title').textContent = '🐱 ' + (data.meta.title || 'Novel Dashboard');
+    document.getElementById('title').textContent = (data.meta.title || 'Novel Dashboard');
     document.getElementById('subtitle').textContent =
       data.meta.genre + (data.meta.seed ? ' — ' + data.meta.seed.substring(0, 80) : '');
     if (data.meta.genre === '' && data.meta.seed === '') document.getElementById('subtitle').textContent = 'Waiting for novel seed...';
@@ -686,7 +686,7 @@ def serve_dashboard(port=8420):
     server = HTTPServer(('localhost', port), DashboardHandler)
     print(f"""
   ╱╲
- ╱  ╲  🐱 Novel Dashboard
+ ╱  ╲  Novel Dashboard
 ╱    ╲
 ╱  N  ╲  Serving at: http://localhost:{port}
 ╱  E   ╲  
