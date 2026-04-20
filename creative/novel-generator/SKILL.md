@@ -1,7 +1,7 @@
 ---
 name: novel-generator
 description: "Generate full novels using a multi-agent pipeline (Orchestrator, Storyteller/DM, Character Agents, Lore Auditor, Prose Stylist). Scene Sandbox model: characters generate independent strategies, Storyteller weaves them into prose, then voice-check pass. Targeted revision, state accumulation with versioned validation. Repeatable — archive old novels and start fresh."
-version: 2.0.0
+version: 2.1.0
 author: rwcrosk-arch
 license: MIT
 dependencies: []
@@ -169,6 +169,7 @@ novel_project/
 - **Characters can enter/exit mid-scene:** The `characters_entering` and `characters_exiting` fields support mid-scene arrivals and departures.
 - **Context overflow guardrail:** Before spawning any agent, estimate context size. If over ~6K tokens: truncate profiles, drop voice examples, drop world rules, flag for human review.
 - **No Orchestrator Auditor role:** Previously a 6th role with subjective ratings and no enforcement. Its functions merged into Orchestrator and Lore Auditor. Five roles instead of six.
+- **No em-dashes — triple-gate enforcement:** Emdashes are banned in all narrative prose. Enforced at three gates: (1) Storyteller prompt has a hard "NO em-dashes" constraint at write-time, (2) Prose Stylist actively removes any that slipped through at polish-time (check #8 + sanity check), (3) Lore Auditor scans for em-dashes and flags them as `character_voice|minor` at audit-time. This pattern works for any style constraint that must survive multiple agent handoffs.
 
 ## Troubleshooting
 
@@ -233,7 +234,7 @@ For each chapter, run these steps in order:
 
 7. **Lore Auditor** → Consistency check via delegate_task
    - Pass: the scene draft, the novel state (characters, world rules, timeline)
-   - Ask for: continuity errors, character voice violations, world rule breaks, knowledge leaks, pacing issues, theme absence
+   - Ask for: continuity errors, character voice violations, world rule breaks, knowledge leaks, pacing issues, theme absence, **em-dashes in prose**
    - Each issue must include: type, severity, exact passage quote, suggested fix
    - If AUDIT_PASS, move on. If issues found: targeted revision (only flagged passages), max 3 rounds
 
@@ -241,6 +242,7 @@ For each chapter, run these steps in order:
    - Pass: the scene draft, character voice profiles, genre
    - Content boundary: prose quality ONLY, never narrative content
    - After revision cycles: narrow re-pass on revised passages only
+   - **Remove any em-dashes** (`—` or `--`) found in the prose. Use commas, periods, or separate sentences.
    - Output: polished scene file + stylist_notes
 
 9. **State Update** → Update `novel_state.yaml`
@@ -412,27 +414,17 @@ This skill is already installed at `~/.hermes/skills/creative/novel-generator/`.
 
 ### Option 1: GitHub Repo (Recommended)
 
-Create a repo (e.g. `yourusername/hermes-novel-skills`) with this structure:
-```
-creative/
-  novel-generator/
-    SKILL.md
-    prompts/
-      orchestrator.md
-      storyteller.md
-      character_agent.md
-      lore_auditor.md
-      prose_stylist.md
-    scripts/
-      dashboard.py
-      progress.py
-      publish.py
-```
+A complete GitHub repo is staged at `/tmp/hermes-novel-generator/` with README, LICENSE, SKILL.md, prompts, scripts, and references. To push it:
 
-Users install with:
-```bash
-hermes skills install yourusername/hermes-novel-skills/creative/novel-generator
-```
+1. Create empty public repo `hermes-novel-generator` at https://github.com/new
+2. Run:
+   ```bash
+   cd /tmp/hermes-novel-generator
+   git branch -m main
+   git remote add origin https://github.com/rwcrosk-arch/hermes-novel-generator.git
+   git push -u origin main
+   ```
+3. Users install with: `hermes skills install rwcrosk-arch/hermes-novel-generator/creative/novel-generator`
 
 Hermes fetches via the GitHub Contents API, scans for security issues, quarantines, then installs to `~/.hermes/skills/`.
 
