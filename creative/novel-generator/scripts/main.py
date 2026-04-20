@@ -574,6 +574,7 @@ DO NOT just concatenate dialogue. Transform into a novel scene with:
 - Sensory details
 - Proper scene structure matching the beat structure
 - Natural dialogue flow — characters should feel like they're really talking
+- **NO em-dashes** (`—` or `--`) anywhere in the prose. Use commas, periods, or separate sentences.
 
 Write the complete scene. This is the RAW DRAFT — it will be checked by an auditor
 and then polished by a stylist. Focus on getting the story right.
@@ -598,6 +599,7 @@ Check for:
 2. Character voice violations (dialogue that doesn't match persona)
 3. World rule violations (magic/technology/social rules broken)
 4. Knowledge leaks (character acts on info they shouldn't have)
+5. **Em-dashes** (`—` or `--`) anywhere in the prose — flag as character_voice|minor
 
 For EACH issue found, specify:
 - Type: continuity|character_voice|world_rule|knowledge_leak
@@ -681,6 +683,7 @@ Improve the prose quality:
 3. Stitching artifacts — remove obvious joins between character contributions
 4. Show don't tell — replace stated emotions with demonstrated ones
 5. Genre tone — ensure prose matches the genre: {genre}
+6. **NO em-dashes** — remove any `—` or `--` in the prose. Use commas, periods, or separate sentences instead.
 
 HARD RULE: You may ONLY modify prose quality. Do NOT change narrative content,
 plot events, or character decisions. If narrative content needs changing,

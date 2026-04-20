@@ -22,6 +22,7 @@ For EACH issue found, you MUST specify:
 ADDITIONAL MANDATORY CHECKS:
 - **Foreign character check**: Scan for ANY Chinese, Japanese, Korean, or other non-English characters. Even a single character is a critical issue.
 - **Meta-tag check**: Scan for tags like [System:], [Note:], [Assistant:], [Character:], or any bracketed meta-commentary. These are artifacts and must be removed.
+- **Em-dash check**: Scan for em-dashes (`—` or `--`) in the prose. These are banned — flag as `character_voice` (severity: minor) since they are a style violation.
 - **Backstory consistency**: Verify that character backstory references match their established history in the state file. A character cannot reference events they haven't experienced or knowledge they haven't learned.
 - **Knowledge boundary check**: For each character, verify they only act on information in their `knowledge.learned_facts`. Cross-reference against `world.timeline` to ensure they haven't learned future events.
 
