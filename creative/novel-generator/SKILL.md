@@ -572,3 +572,59 @@ hermes skills install well-known:https://yoursite.com/.well-known/skills/novel-g
 This skill is a **procedural guide** for the assistant. `delegate_task` cannot be called from Python scripts or `execute_code`. Other Hermes users load the skill, and their assistant follows the step-by-step instructions in SKILL.md, calling `delegate_task` directly at the assistant level.
 
 Scripts (`dashboard.py`, `progress.py`, `publish.py`) CAN be run via `terminal()` or `execute_code()` and should be included as linked files.
+
+## Lessons from Production Incidents
+
+### The "Hermes Tools Not Installed" Trap
+
+When running the pipeline via `terminal()` or `execute_code()`, you may see:
+```
+WARNING: hermes_tools not available. Running in dry-run mode.
+```
+
+**This is correct and expected.** `delegate_task`, `read_file`, `write_file`, etc. are **assistant-level tools**, not Python imports. They cannot be used inside subprocess Python scripts. The pipeline script (`main.py`) has a fallback that prints this warning and skips agent calls — the actual agent orchestration happens at the assistant level, not in a subprocess.
+
+**Never try to `import delegate_task` in Python.** It will fail. The assistant calls `delegate_task` directly as a tool invocation.
+
+### The Overwrite Incident (The Hollow Stars)
+
+A completed 182,519-word novel with 20 chapters and a published EPUB was nearly destroyed because:
+1. A new generation was started without archiving
+2. `novel_state.yaml` was overwritten directly via `write_file`
+3. Scene files in `scenes/` were partially clobbered
+4. Only `chapters/` and `output/` survived because they were in separate directories
+
+**Recovery pattern:**
+```bash
+# Check what survived
+find novel_project/chapters -name "*.md" | wc -l   # chapters/ usually survives
+find novel_project/output -name "*.epub"           # EPUB usually survives
+find novel_project/scenes -name "*.md" | wc -l     # scenes/ often partially lost
+
+# Emergency archive
+cp -r novel_project novel_archive/<title>_<timestamp>/
+
+# Reconstruct state from chapters
+# Read chapter files to extract: title, characters, plot points
+# Rebuild novel_state.yaml with recovered metadata
+# Rebuild PROGRESS.md with chapter word counts
+```
+
+**Why chapters/ survives:** The pipeline writes to `scenes/` during generation, then assembles to `chapters/` at chapter-end. If a new run starts mid-novel, it overwrites `scenes/` and `novel_state.yaml` but leaves `chapters/` untouched until the new run reaches assembly.
+
+### Verify Before Destructive Operations
+
+Before ANY write to `novel_state.yaml`, `scenes/`, or destructive action:
+1. Check if existing work exists (`check_existing_novel()`)
+2. If the user says "generate a novel" and work already exists, ASK: "You have a completed novel 'Title' with N chapters. Archive it first?"
+3. Never assume "generate a novel" means "start fresh" — the user may mean "continue" or "regenerate cover"
+
+### When the User Says a Novel Is Already Done
+
+If the user says "wasn't this novel already done?" or "the exported EPUB is still there":
+1. **STOP all generation immediately**
+2. Check `novel_project/chapters/` for existing chapter files
+3. Check `novel_project/output/` for existing EPUB
+4. Check `novel_project/novel_state.yaml` for `meta.title`
+5. Archive before any new work
+6. Do not overwrite until explicitly confirmed by user
