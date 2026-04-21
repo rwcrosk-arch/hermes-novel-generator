@@ -1,7 +1,7 @@
 ---
 name: novel-generator
 description: "Generate full novels using a multi-agent pipeline (Orchestrator, Storyteller/DM, Character Agents, Lore Auditor, Prose Stylist). Scene Sandbox model: characters generate independent strategies, Storyteller weaves them into prose, then voice-check pass. Targeted revision, state accumulation with versioned validation. Repeatable — archive old novels and start fresh."
-version: 2.2.0
+version: 2.3.0
 author: rwcrosk-arch
 license: MIT
 dependencies: []
@@ -324,6 +324,44 @@ For each chapter, run these steps in order:
     - Save chapter to `output/chapter_XX.md`
     - Snapshot state to `.snapshots/`
 
+11. **Automated Publishing** (after all chapters complete)
+    - Run `publish.py --all` to generate cover, overlay title, assemble EPUB
+    - Dashboard auto-detects published EPUB and cover image
+    - Static dashboard regeneration includes download links
+    - Scenes and chapters in dashboard are clickable links for preview
+
+### Automated Publishing Workflow
+
+When `meta.status` is set to `"complete"`, the publishing pipeline should run automatically:
+
+```bash
+cd novel_project
+# Full pipeline: cover generation + title overlay + EPUB assembly
+python3 scripts/publish.py --all
+
+# Or step by step:
+python3 scripts/generate_cover.py --seed 42      # AI cover
+python3 scripts/publish.py --overlay-only        # Title overlay
+python3 scripts/publish.py --epub-only           # EPUB assembly
+
+# Regenerate dashboard to show published assets
+python3 scripts/dashboard.py --static
+```
+
+The dashboard automatically detects published assets:
+- **EPUB download button** appears when `output/*.epub` exists
+- **Cover thumbnail** appears when `publish/cover_final.jpg` exists
+- Both are served via `/download/epub` and `/files/publish/` routes
+- The EPUB filename is derived from `meta.title` in `novel_state.yaml`
+
+### Scene & Chapter Preview Links
+
+The dashboard renders every scene and chapter as clickable links:
+- **Scenes**: Click "Sc N" to open the scene draft markdown in a new tab
+- **Chapters**: Click the chapter title to open the assembled chapter markdown
+- Links are served via `/files/scenes/chXX_sYY_draft.md` and `/files/chapters/chapter_XX.md`
+- This works in both live server mode and static HTML mode
+
 ### Novel Completion
 
 When the last chapter is generated, three things must happen that are easy to forget:
@@ -439,6 +477,15 @@ The dashboard automatically detects published assets:
 - **Cover thumbnail** displayed alongside the download card
 - Both served via the `/files/publish/` and `/download/epub` routes
 - Regenerate static dashboard after publishing: `python3 scripts/dashboard.py --static`
+- **EPUB filename** is derived from `meta.title` in `novel_state.yaml`, not hardcoded
+
+### Scene & Chapter Preview Links
+
+The dashboard renders clickable preview links for all content:
+- **Scenes**: Click "Sc N" to open `scenes/chXX_sYY_draft.md` in a new tab
+- **Chapters**: Click the chapter title to open `chapters/chapter_XX.md`
+- Links are served via the `/files/` route in both live and static modes
+- This allows reviewing any scene or chapter directly from the dashboard
 
 ### Publishing Troubleshooting
 

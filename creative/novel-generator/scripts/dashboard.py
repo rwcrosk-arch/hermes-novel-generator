@@ -214,7 +214,9 @@ def get_progress_data():
     
     # Published assets (EPUB, cover)
     published = {}
-    epub_path = PROJECT_ROOT / "output" / "The_Apothecarys_Second_Life.epub"
+    # Derive EPUB filename from title
+    safe_title = re.sub(r'[^\w\s-]', '', meta.get("title", "Novel")).strip().replace(' ', '_')
+    epub_path = PROJECT_ROOT / "output" / f"{safe_title}.epub"
     cover_jpg = PROJECT_ROOT / "publish" / "cover_final.jpg"
     cover_png = PROJECT_ROOT / "publish" / "cover_final.png"
     cover_raw = PROJECT_ROOT / "publish" / "cover_raw.png"
@@ -623,7 +625,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(b'File not found')
         elif self.path == '/download/epub' or self.path == '/download/epub/':
             # EPUB download with proper headers
-            epub_path = PROJECT_ROOT / 'output' / 'The_Apothecarys_Second_Life.epub'
+            state = load_state()
+            meta = state.get("meta", {})
+            safe_title = re.sub(r'[^\w\s-]', '', meta.get("title", "Novel")).strip().replace(' ', '_')
+            epub_path = PROJECT_ROOT / 'output' / f'{safe_title}.epub'
             if epub_path.exists():
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/epub+zip')
@@ -686,12 +691,12 @@ def serve_dashboard(port=8420):
     server = HTTPServer(('localhost', port), DashboardHandler)
     print(f"""
   ╱╲
- ╱  ╲  Novel Dashboard
-╱    ╲
-╱  N  ╲  Serving at: http://localhost:{port}
-╱  E   ╲  
-╱  K    ╲  Auto-refreshes every 10 seconds
-╱  O     ╲ 
+ ╱    ╲  Novel Dashboard
+╱      ╲
+╱   N   ╲  Serving at: http://localhost:{port}
+╱   E    ╲  
+╱   K     ╲  Auto-refreshes every 10 seconds
+╱   O      ╲ 
 ╱_________╲  Press Ctrl+C to stop
 
 """)
