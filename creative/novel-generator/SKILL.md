@@ -1,7 +1,7 @@
 ---
 name: novel-generator
 description: "Generate full novels using a multi-agent pipeline (Orchestrator, Storyteller/DM, Character Agents, Lore Auditor, Prose Stylist). Scene Sandbox model: characters generate independent strategies, Storyteller weaves them into prose, then voice-check pass. Targeted revision, state accumulation with versioned validation. Repeatable — archive old novels and start fresh."
-version: 2.3.0
+version: 2.4.0
 author: rwcrosk-arch
 license: MIT
 dependencies: []
@@ -248,6 +248,82 @@ Write complete chapter with scene breaks (***). Save to [path].
 | 16-20 | ~35K tokens | ~400K+ tokens |
 
 The inline approach scales linearly. The file-reading approach scales exponentially.
+
+**Validated at scale:** This pattern successfully generated 17 consecutive chapters (Ch4-20 of a 20-chapter hard sci-fi novel, 182K words) with consistent quality, no em-dashes, and coherent continuity. Average chapter length: 8,500 words. Each subagent call completed in 2-4 minutes.
+
+### Resuming After Interruption / State Reconciliation
+
+When a novel generation is paused and resumed (context compression, session end, long gaps), `novel_state.yaml` often drifts from the actual filesystem state. **Never assume the state file is accurate.** Always reconcile before continuing.
+
+**Common drift patterns:**
+- Chapter files exist in `chapters/` but are missing from `state["chapters"]`
+- `meta.current_chapter` is stale (e.g., still points to Ch3 when Ch1-3 are all complete)
+- `meta.status` is still `"drafting"` when all chapters exist
+- `summaries.chapter_summaries` is missing entries for completed chapters
+- Character `growth.current_state` describes a chapter that was completed sessions ago
+
+**Pre-flight reconciliation checklist (run before generating the next chapter):**
+
+1. **Scan filesystem vs. state:**
+   ```python
+   import os, glob
+   ch_files = sorted(glob.glob('chapters/chapter_*.md'))
+   state_chapters = state.get('chapters', [])
+   print(f'Files on disk: {len(ch_files)}, Tracked in state: {len(state_chapters)}')
+   ```
+
+2. **If chapters exist on disk but not in state:**
+   - Read each missing chapter file
+   - Count scenes (`grep "^## Scene"` or split on `***`)
+   - Add the chapter entry to `state["chapters"]` with `status: "complete"`
+   - Add a summary to `state["summaries"]["chapter_summaries"]`
+   - Update character `growth.current_state` to match the chapter's ending
+
+3. **Update meta:**
+   - `meta.current_chapter` = next chapter to generate (last complete + 1)
+   - `meta.current_scene` = 1
+   - `meta.last_modified` = current timestamp
+   - `meta.state_version` += 1
+
+4. **Verify character ages and states:**
+   - For novels spanning years, calculate each character's current age based on elapsed time
+   - Update `growth.current_state` to reflect where they are NOW, not where they were at the last saved state
+   - This is especially critical when resuming after context compression
+
+5. **If ALL chapters are complete:**
+   - Set `meta.status = "complete"`
+   - Run publishing pipeline (cover + EPUB)
+   - Do NOT skip this step; the dashboard and completion checks depend on it
+
+**Why this matters:** If you skip reconciliation and generate Ch4 while the state still thinks you're on Ch3, the inline context block will describe a world state from two chapters ago. Characters will reference events that haven't happened, or fail to reference events that have. Continuity breaks immediately.
+
+**Example of drift from this session:**
+- Files existed: `chapters/chapter_01.md`, `chapter_02.md`, `chapter_03.md`
+- State claimed: only 2 chapters tracked, `current_chapter: 3`
+- Ch3 was NOT in `state["chapters"]` at all
+- `summaries.chapter_summaries` only had entries for Ch1-2
+- Fix required: manually add Ch3 entry, update character states, set `current_chapter: 4`
+
+### Reviewing Scripts for Personal Artifacts
+
+Before sharing or publishing a skill, review all generated scripts for personal branding, test data, or hardcoded values from previous novels:
+
+| Artifact Type | Example | Fix |
+|---------------|---------|-----|
+| Pet names / mascots | `"Neko-chan was here"`, cat emojis in UI | Replace with neutral text |
+| Hardcoded novel titles | `The_Apothecarys_Second_Life.epub` as default filename | Derive from `meta.title` dynamically |
+| Hardcoded author names | `"by Farekrow"` as default overlay text | Use `meta.author` or prompt for it |
+| Test comments | `print("DEBUG: lol")` | Remove or convert to proper logging |
+| Local paths | `/home/ross/...` in error messages | Use relative paths or `PROJECT_ROOT` |
+
+**Pattern for dynamic title/author:**
+```python
+import re
+safe_title = re.sub(r'[^\w\s-]', '', meta.get("title", "Novel")).strip().replace(' ', '_')
+epub_path = PROJECT_ROOT / "output" / f"{safe_title}.epub"
+```
+
+**Don't forget the import:** If you add `re.sub()` to a script that didn't previously use regex, you MUST add `import re`. The dashboard's static generation will fail with `NameError` otherwise.
 
 ### Practical Generation Flow (What Actually Happens)
 
@@ -503,6 +579,10 @@ The dashboard renders clickable preview links for all content:
 | Cover not showing as Page 1 | Create manual `EpubHtml` cover page + add as FIRST item in `book.spine`. `set_cover(create_page=True)` does NOT add to spine |
 | Duplicate cover image warning | `set_cover()` already adds the image file; don't add a separate `EpubItem` for it |
 | Dashboard shows 2x word count | `count_total_words()` was counting both `scenes/` and `chapters/`. Only count `chapters/` (assembled prose), not intermediate scene drafts |
+| Dashboard `NameError: name 're' is not defined` | Add `import re` to `dashboard.py`. Dynamic EPUB filename derivation from `meta.title` requires it |
+| EPUB has wrong title/author | `publish.py --all` uses hardcoded defaults if `--title` and `--author` are not passed explicitly. Always pass: `python3 scripts/publish.py --all --title "Your Title" --author "Your Name"` |
+| State file says "drafting" but all chapters exist | Run reconciliation (see "Resuming After Interruption" section). Set `meta.status = "complete"` manually if all chapters are verified done |
+| Scripts contain personal branding | Review all scripts for pet names, emojis, hardcoded titles from previous novels. See "Reviewing Scripts for Personal Artifacts" section |
 
 ### Prerequisites
 
