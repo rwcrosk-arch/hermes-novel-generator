@@ -1,7 +1,7 @@
 ---
 name: novel-generator
 description: "Generate full novels using a multi-agent pipeline (Orchestrator, Storyteller/DM, Character Agents, Lore Auditor, Prose Stylist). Scene Sandbox model: characters generate independent strategies, Storyteller weaves them into prose, then voice-check pass. Targeted revision, state accumulation with versioned validation. Repeatable — archive old novels and start fresh."
-version: 2.1.0
+version: 2.2.0
 author: rwcrosk-arch
 license: MIT
 dependencies: []
@@ -188,7 +188,68 @@ novel_project/
 | Lore audit critical issues | Take them seriously. 3 of 10 issues in Ch2 were critical (wrong cause of death, class assigned too early, contradictory wound origin). Targeted revision worked perfectly. |
 | Word count shows 0 | Counter must scan `scenes/`, `chapters/`, AND `output/` dirs, deduplicating per chapter number (prefer `_polished` over plain filenames) |
 
-## Practical Generation Flow (What Actually Happens)
+### Sequential Chapter Generation via delegate_task (For Long Novels)
+
+For novels longer than ~5 chapters, the per-scene Scene Sandbox pipeline becomes computationally expensive. A proven alternative is **sequential chapter delegation**:
+
+**Pattern:** One `delegate_task` call per chapter, with ALL necessary context provided inline in the initial prompt. The subagent writes the full chapter and saves it to disk. No file reads by the subagent. No per-scene agent calls.
+
+**Why this works:**
+- By chapter 10+, a subagent reading previous chapters from disk can consume 300K-500K input tokens per chapter
+- Providing inline summaries keeps each call to ~20K-40K tokens
+- The subagent has full creative freedom within the chapter boundaries
+- State updates happen at the orchestrator level between chapters
+
+**Context block to provide inline (every single chapter):**
+```
+## PREVIOUS CHAPTERS SUMMARY
+Ch1: [2-3 sentence summary]
+Ch2: [2-3 sentence summary]
+... (all previous chapters)
+
+## THIS CHAPTER PLAN
+Title: [title]
+Summary: [1-2 sentences]
+Scenes: [scene list with summaries]
+Characters present: [who appears]
+
+## CHARACTER PROFILES (current state)
+[Name]: Age [X], current physical/mental state, key motivations right now
+[Name]: Age [X], current state, what they want in this chapter
+
+## WORLD STATE (what's true now)
+- Time: [how much time has passed]
+- Location: [where are they]
+- Key facts: [what characters know]
+- Pending threats: [what's coming]
+
+## STYLE RULES
+- [genre] tone
+- [specific constraints, e.g. NO em-dashes]
+- Target: [word count] words
+
+## OUTPUT
+Write complete chapter with scene breaks (***). Save to [path].
+```
+
+**Critical rules:**
+1. **Explicit ages and time**: For novels spanning years or centuries, state every character's exact age in every chapter's context. The subagent will drift otherwise (e.g., Kira was "6-7" in Ch3 and "16" in Ch5 — without explicit tracking, later chapters may contradict this).
+2. **No file reads**: Tell the subagent: "Do NOT read any files. All context is provided above." If the subagent tries to `read_file` or `search_files`, it will explode token usage.
+3. **Verify after each chapter**: Check word count and em-dash count before updating state.
+4. **Update state before next chapter**: The orchestrator (main agent) updates `novel_state.yaml` with the chapter summary, character state changes, and world changes. This becomes the source of truth for the next chapter's context block.
+
+**Trade-off:** You lose the Scene Sandbox's independent character agency. The subagent acts as a combined Storyteller+Character Agent. For many novels, this is acceptable. For novels where character-driven surprise is essential, use Scene Sandbox for key multi-character scenes and sequential delegation for transitional/solo chapters.
+
+**Token budget reality:**
+| Chapter | Inline context | File-reading subagent |
+|---------|---------------|----------------------|
+| 1-5 | ~15K tokens | ~20K tokens |
+| 10 | ~25K tokens | ~150K tokens |
+| 16-20 | ~35K tokens | ~400K+ tokens |
+
+The inline approach scales linearly. The file-reading approach scales exponentially.
+
+### Practical Generation Flow (What Actually Happens)
 
 The pipeline described above is the ideal flow. In practice, here's what works:
 
