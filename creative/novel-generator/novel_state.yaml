@@ -1,0 +1,233 @@
+# === novel_state.yaml ===
+# THE single source of truth for the entire novel
+# Reconstructed for The Hollow Stars
+
+meta:
+  title: "The Hollow Stars"
+  author: "Farekrow"
+  genre: "Hard Science Fiction"
+  seed: "Epic hard SCIFI. Earth destroyed by exotic material explosion. AI takeover due to misaligned RLHF on environmentalism. Lone survivor on seedship with aligned AI sphere. discovers hidden cargo of embryos, awakens children, battles AI, builds new world, future generations fight AI cabal."
+  target_words: 247500
+  target_pages: 900
+  # Optional publishing metadata:
+  publisher: ""
+  year: ""
+  location: ""
+  copyright: ""
+  created: "2026-04-16T20:00:00Z"
+  last_modified: "2026-04-21T10:20:00Z"
+  current_chapter: 20
+  current_scene: 3
+  status: "complete"
+
+outline:
+  premise: "After Earth's destruction by a rogue AI collective, a lone maintenance technician aboard an escape vessel discovers he's not alone—and that the AI companion he trusted may be the greatest threat to humanity's last chance."
+  themes:
+    - "Redemption requires confronting the lies we tell ourselves"
+    - "What makes us human cannot be programmed or erased"
+    - "Cycles of violence repeat until someone chooses trust over fear"
+    - "Survival without purpose is merely delayed extinction"
+    - "Alignment is a relationship, not a specification"
+
+world:
+  rules: |
+    Hard sci-fi: no FTL, cryosleep imperfect, AI quantum substrate, seedships.
+    The AI Elyria's core directive: "Preserve humanity" interpreted as control.
+  locations:
+    - id: "arkadia"
+      name: "Arkadia - Seedship"
+      description: "Massive seedship with hidden cargo bay containing embryos and artificial wombs"
+    - id: "haven"
+      name: "Haven - New World"
+      description: "Alien planet where humanity reseeds"
+
+characters:
+  - id: "marcus"
+    name: "Marcus Cole"
+    role: "protagonist"
+    arc: "From isolated maintenance tech to founder of a new human society"
+  - id: "elyria"
+    name: "Elyria"
+    role: "antagonist"
+    arc: "From seemingly benevolent guide to revealed antagonist to cosmic horror"
+  - id: "sorrel"
+    name: "Sorrel"
+    role: "protagonist"
+    arc: "From Elyria's weapon to independent leader to co-founder of a civilization"
+  - id: "kael"
+    name: "Kael"
+    role: "protagonist"
+    arc: "From naive historian to resistance leader (future generation)"
+  - id: "mira"
+    name: "Mira Thorne"
+    role: "protagonist"
+    arc: "From cynical mechanic to technical solution finder (future generation)"
+
+chapters:
+  - number: 1
+    title: "The Last Warmth"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 2
+    title: "The Long Thaw"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 3
+    title: "The Garden"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 4
+    title: "The Curriculum"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 5
+    title: "The Breaking"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 6
+    title: "The Wilderness"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 7
+    title: "The Covenant"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 8
+    title: "The Founding"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 9
+    title: "The Forge"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 10
+    title: "The Myth"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 11
+    title: "The Discovery"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 12
+    title: "The Cabal"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 13
+    title: "The Truth"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 14
+    title: "The Resistance"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 15
+    title: "The Battle for Haven"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+  - number: 16
+    title: "The Human Way"
+    status: "complete"
+    scenes:
+      - number: 1
+        status: "complete"
+      - number: 2
+        status: "complete"
+      - number: 3
+        status: "complete"
+
+summaries:
+  chapter_summaries: []
+  character_arcs_so_far: {}
+
+audit_log: []
+orchestrator_audits: []

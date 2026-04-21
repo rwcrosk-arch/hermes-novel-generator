@@ -28,19 +28,46 @@ The core loop is: Orchestrator plans → Storyteller writes scene briefs → Cha
 Generate a novel with the seed: "A retired spy mentors a teenage hacker while being hunted by her former agency"
 
 # Or with specific options:
-Generate a novel — seed: "A retired spy mentors a teenage hacker", genre: "thriller", chapters: 5, target: novella
+Generate a novel — seed: "A retired spy mentors a teenage hacker", author: "Jane Doe", genre: "thriller", chapters: 5, target: novella
 ```
 
-The user provides a seed concept. From there, the system runs the full pipeline autonomously.
+The user provides a seed concept and **author name (mandatory)**. Optional publishing metadata (publisher, year, location, copyright) can also be provided. From there, the system runs the full pipeline autonomously.
 
 ## Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `seed` | (required) | Novel concept/premise — the one-line idea that drives everything |
-| `genre` | auto-detected | Genre: thriller, fantasy, scifi, romance, literary, horror, mystery, etc. |
-| `chapters` | 10 | Number of chapters to generate |
-| `target` | short_novel | Length target (see table below) |
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `seed` | **Yes** | (none) | Novel concept/premise — the one-line idea that drives everything |
+| `author` | **Yes** | (none) | Author name — used on cover, copyright page, and EPUB metadata |
+| `genre` | No | auto-detected | Genre: thriller, fantasy, scifi, romance, literary, horror, mystery, etc. |
+| `chapters` | No | 10 | Number of chapters to generate |
+| `target` | No | short_novel | Length target (see table below) |
+| `publisher` | No | (none) | Publisher name (appears on copyright page) |
+| `year` | No | (none) | Publication year (appears on copyright page) |
+| `location` | No | (none) | Publication location (appears on copyright page) |
+| `copyright` | No | (none) | Custom copyright notice (overrides auto-generated) |
+
+## CLI Usage
+
+```bash
+# Minimal: seed + author (mandatory)
+python3 scripts/main.py --seed "Your novel concept" --author "Your Name"
+
+# With optional publishing metadata
+python3 scripts/main.py \
+  --seed "Your novel concept" \
+  --author "Your Name" \
+  --publisher "Your Press" \
+  --year "2026" \
+  --location "New York, NY" \
+  --copyright "Copyright 2026 Your Name. All rights reserved."
+
+# With length target
+python3 scripts/main.py \
+  --seed "Your novel concept" \
+  --author "Your Name" \
+  --target epic
+```
 
 ## Length Targets (paperback pages at ~275 words/page)
 
@@ -297,10 +324,11 @@ The inline approach scales linearly. The file-reading approach scales exponentia
 The pipeline described above is the ideal flow. In practice, here's what works:
 
 ### M0: Outline Generation
-1. **Generate the outline yourself** (in the main agent) — delegate_task agents can't reliably write YAML state files. Build the full `novel_state.yaml` with all characters, world, locations, and chapter plans.
-2. **Immediately audit** via delegate_task with the Orchestrator Auditor prompt. Pass the outline and ask for: arc completeness, character balance, pacing, theme presence, plausibility.
-3. **Revise the outline** based on auditor feedback. Common issues: missing chapters for resolution, characters who disappear for 3+ chapters, dropped plot threads (e.g., a rebalancing event that never resolves), romantic/found-family beats that are missing.
-4. **Validate YAML** after every edit to `novel_state.yaml`. Use `yaml.safe_load()` — the patch tool strips leading whitespace on deeply-nested items, and `|` block scalars eat sibling keys if indented wrong.
+1. **Collect author and publishing metadata** from the user. Author is **mandatory**.
+2. **Generate the outline yourself** (in the main agent) — delegate_task agents can't reliably write YAML state files. Build the full `novel_state.yaml` with all characters, world, locations, chapter plans, and the `meta` block including `author` (required), `publisher`, `year`, `location`, `copyright` (optional).
+3. **Immediately audit** via delegate_task with the Orchestrator Auditor prompt. Pass the outline and ask for: arc completeness, character balance, pacing, theme presence, plausibility.
+4. **Revise the outline** based on auditor feedback. Common issues: missing chapters for resolution, characters who disappear for 3+ chapters, dropped plot threads (e.g., a rebalancing event that never resolves), romantic/found-family beats that are missing.
+5. **Validate YAML** after every edit to `novel_state.yaml`. Use `yaml.safe_load()` — the patch tool strips leading whitespace on deeply-nested items, and `|` block scalars eat sibling keys if indented wrong.
 
 ### M1+: Chapter Generation (per chapter)
 For each chapter, run these steps in order:
@@ -455,7 +483,7 @@ python3 scripts/generate_cover.py --seed 42
 
 ### Publishing Pipeline (Dynamic Metadata)
 
-The publishing pipeline (`scripts/publish.py`) reads title, author, and genre from `novel_state.yaml`. **No hardcoded defaults.**
+The publishing pipeline (`scripts/publish.py`) reads title, author, and publishing metadata from `novel_state.yaml`. **No hardcoded defaults.**
 
 ```bash
 python3 scripts/publish.py --all     # Full pipeline: cover → title overlay → EPUB
@@ -463,10 +491,34 @@ python3 scripts/publish.py --overlay-only   # Just overlay title on existing cov
 python3 scripts/publish.py --epub-only      # Just assemble EPUB from chapters
 ```
 
-- Title and author are loaded from `novel_state.yaml` automatically
+- **Title** and **author** are loaded from `novel_state.yaml` automatically
+- **Publisher, year, location, copyright** are also loaded from state if present
 - EPUB filename is derived from `meta.title` (e.g., `The_Hollow_Stars.epub`)
-- Cover embeds the correct title from state
+- Cover embeds the correct title and author from state
+- **Copyright page** is automatically generated inside the EPUB with:
+  - Title and author (centered)
+  - Publisher and location (if provided)
+  - Year (if provided)
+  - Copyright notice (from state or auto-generated: "Copyright YEAR AUTHOR. All rights reserved.")
+  - Fiction disclaimer
 - To override: `--title "Custom Title" --author "Name"`
+
+### Publishing Metadata in novel_state.yaml
+
+The `meta` section of the state file stores all publishing info:
+
+```yaml
+meta:
+  title: "The Hollow Stars"
+  author: "Farekrow"           # MANDATORY — used on cover and copyright page
+  genre: "Hard Science Fiction"
+  publisher: "Your Press"      # Optional — appears on copyright page
+  year: "2026"                 # Optional — appears on copyright page
+  location: "New York, NY"     # Optional — appears on copyright page
+  copyright: ""                # Optional — custom notice (auto-generated if empty)
+```
+
+**The author field is mandatory.** The pipeline will refuse to start without it. The cover overlay uses `meta.author`, and the EPUB's copyright page requires it.
 
 ### 4. Full Pipeline (All Steps)
 

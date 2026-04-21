@@ -31,7 +31,7 @@ CHAPTERS_DIR = PROJECT_ROOT / "chapters"
 
 # Novel metadata — loaded from novel_state.yaml, NOT hardcoded
 def get_novel_metadata():
-    """Load title, author, genre from novel_state.yaml.
+    """Load title, author, genre, and publishing metadata from novel_state.yaml.
     Falls back to defaults only if state file is missing.
     """
     state = load_novel_state()
@@ -41,6 +41,10 @@ def get_novel_metadata():
         "author": meta.get("author", ""),
         "genre": meta.get("genre", "Fiction"),
         "seed": meta.get("seed", ""),
+        "publisher": meta.get("publisher", ""),
+        "year": meta.get("year", ""),
+        "location": meta.get("location", ""),
+        "copyright": meta.get("copyright", ""),
     }
 
 # Cover generation settings
@@ -530,6 +534,10 @@ def assemble_epub(cover_path=None, title=None, author=None):
     state_meta = state.get("meta", {})
     genre = state_meta.get("genre", "Fiction")
     seed = state_meta.get("seed", "")
+    publisher = state_meta.get("publisher", "")
+    year = state_meta.get("year", "")
+    location = state_meta.get("location", "")
+    copyright_text = state_meta.get("copyright", "")
 
     # ── Create book ──────────────────────────────────────────────────────
     book = epub.EpubBook()
@@ -541,8 +549,14 @@ def assemble_epub(cover_path=None, title=None, author=None):
     if seed:
         book.add_metadata("DC", "description", seed)
     book.add_metadata("DC", "subject", genre)
-    book.add_metadata("DC", "publisher", "Self-Published")
-    book.add_metadata("DC", "rights", "Copyright 2026. All rights reserved.")
+    
+    # Use publisher from state if available, otherwise "Self-Published"
+    pub_name = publisher or "Self-Published"
+    book.add_metadata("DC", "publisher", pub_name)
+    
+    # Use copyright from state if available, otherwise generic
+    rights = copyright_text or f"Copyright {year or '2026'} {author or ''}. All rights reserved."
+    book.add_metadata("DC", "rights", rights)
 
     # ── Add cover ────────────────────────────────────────────────────────
     cover_page = None
@@ -585,6 +599,45 @@ def assemble_epub(cover_path=None, title=None, author=None):
         content=EPUB_CSS.encode("utf-8"),
     )
     book.add_item(style_item)
+
+    # ── Create copyright / publisher page ───────────────────────────────
+    copyright_page = None
+    # Build copyright HTML from metadata
+    copyright_lines = [
+        '<div style="text-align: center; margin-top: 40%; page-break-after: always;">',
+        f'<h1 style="page-break-before: auto; margin-bottom: 2em;">{html_escape(title)}</h1>',
+    ]
+    if author:
+        copyright_lines.append(f'<p style="text-indent: 0; font-size: 1.2em; margin-bottom: 1em;">by {html_escape(author)}</p>')
+    if publisher:
+        pub_str = html_escape(publisher)
+        if location:
+            pub_str = f"{html_escape(location)}<br/>{pub_str}"
+        copyright_lines.append(f'<p style="text-indent: 0; margin-top: 2em;">{pub_str}</p>')
+    if year:
+        copyright_lines.append(f'<p style="text-indent: 0;">{html_escape(year)}</p>')
+    
+    rights_line = copyright_text or f"Copyright {year or '2026'} {author or ''}. All rights reserved."
+    copyright_lines.extend([
+        '<p style="text-indent: 0; margin-top: 3em; font-size: 0.9em; color: #555;">',
+        html_escape(rights_line),
+        '</p>',
+        '<p style="text-indent: 0; margin-top: 2em; font-size: 0.85em; color: #777; font-style: italic;">',
+        'This is a work of fiction. Any resemblance to actual persons, living or dead, or actual events is purely coincidental.',
+        '</p>',
+        '</div>',
+    ])
+    
+    copyright_html = "\n".join(copyright_lines)
+    copyright_page = epub.EpubHtml(
+        title="Copyright",
+        file_name="copyright.xhtml",
+        lang="en",
+    )
+    copyright_page.content = copyright_html.encode("utf-8")
+    copyright_page.add_item(style_item)
+    book.add_item(copyright_page)
+    print("Copyright page added")
 
     # ── Read and add chapters ────────────────────────────────────────────
     chapter_files = sorted(
@@ -656,11 +709,13 @@ def assemble_epub(cover_path=None, title=None, author=None):
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
 
-    # ── Set spine ────────────────────────────────────────────────────────
-    # Spine order: cover page → nav → chapters
+    # ── Set spine ──────────────────────────────────────────────────────
+    # Spine order: cover page → copyright page → nav → chapters
     spine = []
     if cover_page:
         spine.append(cover_page)
+    if copyright_page:
+        spine.append(copyright_page)
     spine.append("nav")  # TOC navigation
     spine.extend(spine_items)
     book.spine = spine

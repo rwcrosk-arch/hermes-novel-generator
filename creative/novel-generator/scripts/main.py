@@ -314,7 +314,7 @@ def build_agent_context(state, chapter_num, scene_num, agent_role):
 # GENERATION LOOP STEPS
 # ============================================================
 
-def generate_outline(seed, target="short_novel"):
+def generate_outline(seed, author, publisher=None, year=None, location=None, copyright_text=None, target="short_novel"):
     """M0: Orchestrator produces outline from seed."""
     print("\n=== M0: Generating Outline ===")
     
@@ -331,6 +331,18 @@ def generate_outline(seed, target="short_novel"):
         print("ERROR: hermes_tools not available. Cannot generate outline.")
         return None
     
+    # Build publishing metadata block
+    publishing_meta = f"""author: \"{author}\""
+"""
+    if publisher:
+        publishing_meta += f"  publisher: \"{publisher}\"\n"
+    if year:
+        publishing_meta += f"  year: \"{year}\"\n"
+    if location:
+        publishing_meta += f"  location: \"{location}\"\n"
+    if copyright_text:
+        publishing_meta += f"  copyright: \"{copyright_text}\"\n"
+    
     result = delegate_task(
         goal="Generate a complete novel outline from the user's seed concept",
         context=f"""
@@ -340,9 +352,12 @@ Create a detailed novel outline for this concept:
 
 SEED: {seed}
 
+PUBLISHING METADATA (include in meta section):
+{publishing_meta}
+
 Output a YAML structure with ALL of the following sections:
 
-1. **meta**: title, genre, the seed itself, created timestamp
+1. **meta**: title, genre, the seed itself, author (MANDATORY), and optional publishing fields (publisher, year, location, copyright). Include created timestamp.
 
 2. **outline**:
    - premise (one-line story premise)
@@ -859,11 +874,16 @@ If the chapter is solid, respond: CHAPTER_REVIEW_PASS
 # MAIN GENERATION LOOP
 # ============================================================
 
-def run_full_loop(seed, max_chapters=None, target="short_novel"):
+def run_full_loop(seed, author, publisher=None, year=None, location=None, copyright_text=None, max_chapters=None, target="short_novel"):
     """Run the complete novel generation loop.
     
     Args:
         seed: Novel concept/premise
+        author: Author name (mandatory)
+        publisher: Publisher name (optional)
+        year: Publication year (optional)
+        location: Publication location (optional)
+        copyright_text: Custom copyright notice (optional)
         max_chapters: Max chapters to generate (None = use outline)
         target: Length target - novella(30k), short_novel(60k), novel(80k), epic(100k+)
     """
@@ -874,12 +894,15 @@ def run_full_loop(seed, max_chapters=None, target="short_novel"):
     
     target_words = LENGTH_TARGETS.get(target, 60000)
     print(f"Starting novel generation with seed: {seed}")
+    print(f"Author: {author}")
+    if publisher:
+        print(f"Publisher: {publisher}")
     print(f"Target length: {target} (~{target_words:,} words, ~{target_words // 275} paperback pages)")
     
     update_progress(stage="generating_outline", target=target)
     
     # M0: Generate outline
-    result = generate_outline(seed, target)
+    result = generate_outline(seed, author, publisher, year, location, copyright_text, target)
     if result is None:
         print("FATAL: Could not generate outline. Aborting.")
         return
@@ -1058,6 +1081,11 @@ if __name__ == "__main__":
         sys.exit(0)
     
     seed = None
+    author = None
+    publisher = None
+    year = None
+    location = None
+    copyright_text = None
     max_chapters = None
     target = "short_novel"
     
@@ -1065,6 +1093,21 @@ if __name__ == "__main__":
     while i < len(sys.argv):
         if sys.argv[i] == '--seed':
             seed = sys.argv[i+1]
+            i += 2
+        elif sys.argv[i] == '--author':
+            author = sys.argv[i+1]
+            i += 2
+        elif sys.argv[i] == '--publisher':
+            publisher = sys.argv[i+1]
+            i += 2
+        elif sys.argv[i] == '--year':
+            year = sys.argv[i+1]
+            i += 2
+        elif sys.argv[i] == '--location':
+            location = sys.argv[i+1]
+            i += 2
+        elif sys.argv[i] == '--copyright':
+            copyright_text = sys.argv[i+1]
             i += 2
         elif sys.argv[i] == '--max-chapters':
             max_chapters = int(sys.argv[i+1])
@@ -1077,6 +1120,13 @@ if __name__ == "__main__":
     
     if not seed:
         print("ERROR: --seed is required")
+        print("Usage: python scripts/main.py --seed \"Your novel concept\" --author \"Your Name\" [options...]")
+        sys.exit(1)
+    
+    if not author:
+        print("ERROR: --author is required (author name)")
+        print("Usage: python scripts/main.py --seed \"Your novel concept\" --author \"Your Name\" [options...]")
+        print("Optional: --publisher, --year, --location, --copyright")
         sys.exit(1)
     
     # CRITICAL: Check for existing novel before generation
@@ -1088,4 +1138,4 @@ if __name__ == "__main__":
         print(f"ERROR: Unknown target '{target}'. Choose from: {', '.join(LENGTH_TARGETS.keys())}")
         sys.exit(1)
     
-    run_full_loop(seed, max_chapters, target)
+    run_full_loop(seed, author, publisher, year, location, copyright_text, max_chapters, target)
