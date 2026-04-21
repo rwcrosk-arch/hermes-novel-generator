@@ -29,10 +29,19 @@ COVER_DIR = PROJECT_ROOT / "publish"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 CHAPTERS_DIR = PROJECT_ROOT / "chapters"
 
-# Novel metadata
-DEFAULT_TITLE = "The Apothecary's Second Life"
-DEFAULT_AUTHOR = "Farekrow"
-DEFAULT_GENRE = "Isekai / RPG Light Novel"
+# Novel metadata — loaded from novel_state.yaml, NOT hardcoded
+def get_novel_metadata():
+    """Load title, author, genre from novel_state.yaml.
+    Falls back to defaults only if state file is missing.
+    """
+    state = load_novel_state()
+    meta = state.get("meta", {})
+    return {
+        "title": meta.get("title", "Untitled Novel"),
+        "author": meta.get("author", ""),
+        "genre": meta.get("genre", "Fiction"),
+        "seed": meta.get("seed", ""),
+    }
 
 # Cover generation settings
 COMFYUI_PORT = 8189
@@ -40,15 +49,6 @@ COMFYUI_DIR = PROJECT_ROOT / "tools" / "comfyui"
 MODEL_NAME = "animagine-xl-3.1.safetensors"
 COVER_WIDTH = 1024
 COVER_HEIGHT = 1536  # 2:3 ratio (standard light novel cover)
-
-DEFAULT_COVER_PROMPT = (
-    "anime light novel cover illustration, a young man with dark hair standing in "
-    "a medieval fantasy apothecary shop, glowing potion bottles on wooden shelves, "
-    "warm candlelight and magical blue sparkles, a catgirl companion with silver hair "
-    "sitting on the counter watching him, fantasy village visible through the window, "
-    "detailed anime art style, vibrant colors, dramatic lighting, high quality, "
-    "masterpiece, light novel cover composition"
-)
 
 NEGATIVE_PROMPT = (
     "low quality, worst quality, bad anatomy, bad hands, missing fingers, "
@@ -81,7 +81,32 @@ def generate_cover_diffusers(prompt=None, neg_prompt=None, seed=42, output_path=
         output_path = COVER_DIR / "cover_raw.png"
     COVER_DIR.mkdir(parents=True, exist_ok=True)
 
-    prompt = prompt or DEFAULT_COVER_PROMPT
+    # Build prompt from novel state if not provided
+    if prompt is None:
+        state = load_novel_state()
+        meta = state.get("meta", {})
+        genre = meta.get("genre", "fiction").lower()
+        seed_desc = meta.get("seed", "")
+        
+        if "sci-fi" in genre or "science fiction" in genre:
+            prompt = (
+                "science fiction book cover illustration, cinematic, dramatic lighting, "
+                "deep space background with distant stars and nebulae, "
+                "a massive cylindrical seedship drifting through the void, "
+                "small human figure in EVAC suit for scale, "
+                "translucent glowing AI sphere floating nearby, "
+                "shattered planet debris in the distance, "
+                "ominous blue-white holographic glow, "
+                "detailed sci-fi art style, cinematic composition, "
+                "high contrast, cold blue and warm amber color palette, "
+                "high quality, masterpiece, book cover composition"
+            )
+        else:
+            prompt = (
+                "book cover illustration, dramatic, cinematic lighting, "
+                "detailed art style, high quality, masterpiece, book cover composition"
+            )
+    
     neg_prompt = neg_prompt or NEGATIVE_PROMPT
 
     model_dir = COMFYUI_DIR / "models" / "checkpoints"
@@ -210,8 +235,11 @@ def generate_cover_comfyui(prompt=None, neg_prompt=None, seed=None):
 def overlay_title_on_cover(cover_path=None, title=None, author=None):
     """Overlay title and author text onto the cover image."""
     cover_path = Path(cover_path) if cover_path else COVER_DIR / "cover_raw.png"
-    title = title or DEFAULT_TITLE
-    author = author or DEFAULT_AUTHOR
+    
+    # Load metadata from state if not provided
+    meta = get_novel_metadata()
+    title = title or meta["title"]
+    author = author or meta["author"]
 
     if not cover_path.exists():
         print(f"ERROR: Cover image not found at {cover_path}")
@@ -489,21 +517,23 @@ def assemble_epub(cover_path=None, title=None, author=None):
     ebooklib EpubHtml.content should contain ONLY the inner body HTML.
     The library wraps it in the proper XHTML document structure.
     """
-    title = title or DEFAULT_TITLE
-    author = author or DEFAULT_AUTHOR
+    # Load metadata from state if not provided
+    meta = get_novel_metadata()
+    title = title or meta["title"]
+    author = author or meta["author"]
     cover_path = Path(cover_path) if cover_path else COVER_DIR / "cover_final.jpg"
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # Load state for metadata
     state = load_novel_state()
-    meta = state.get("meta", {})
-    genre = meta.get("genre", DEFAULT_GENRE)
-    seed = meta.get("seed", "")
+    state_meta = state.get("meta", {})
+    genre = state_meta.get("genre", "Fiction")
+    seed = state_meta.get("seed", "")
 
     # ── Create book ──────────────────────────────────────────────────────
     book = epub.EpubBook()
-    book.set_identifier("apothecary-second-life")
+    book.set_identifier(title.lower().replace(" ", "-").replace("'", ""))
     book.set_title(title)
     book.set_language("en")
     book.add_author(author)
@@ -512,7 +542,7 @@ def assemble_epub(cover_path=None, title=None, author=None):
         book.add_metadata("DC", "description", seed)
     book.add_metadata("DC", "subject", genre)
     book.add_metadata("DC", "publisher", "Self-Published")
-    book.add_metadata("DC", "rights", "Copyright © 2026 Farekrow. All rights reserved.")
+    book.add_metadata("DC", "rights", "Copyright 2026. All rights reserved.")
 
     # ── Add cover ────────────────────────────────────────────────────────
     cover_page = None
@@ -716,12 +746,19 @@ def main():
     parser.add_argument("--epub-only", action="store_true", help="Assemble EPUB only")
     parser.add_argument("--all", action="store_true", help="Run full pipeline (default if no action specified)")
     parser.add_argument("--cover-prompt", type=str, default=None, help="Custom cover generation prompt")
-    parser.add_argument("--title", type=str, default=DEFAULT_TITLE, help="Novel title")
-    parser.add_argument("--author", type=str, default=DEFAULT_AUTHOR, help="Author name")
+    parser.add_argument("--title", type=str, default=None, help="Novel title (default: from novel_state.yaml)")
+    parser.add_argument("--author", type=str, default=None, help="Author name (default: from novel_state.yaml)")
     parser.add_argument("--cover-input", type=str, default=None, help="Path to existing cover image (skip generation)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for cover generation")
     parser.add_argument("--validate", action="store_true", help="Validate EPUB after assembly")
     args = parser.parse_args()
+
+    # Load metadata defaults from state
+    meta = get_novel_metadata()
+    if args.title is None:
+        args.title = meta["title"]
+    if args.author is None:
+        args.author = meta["author"]
 
     # Default to --all if no specific action
     if not any([args.cover_only, args.overlay_only, args.epub_only]):

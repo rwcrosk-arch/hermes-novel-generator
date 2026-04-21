@@ -27,6 +27,69 @@ PROJECT_ROOT = Path(__file__).parent.parent
 STATE_FILE = PROJECT_ROOT / "novel_state.yaml"
 SCENES_DIR = PROJECT_ROOT / "scenes"
 SNAPSHOTS_DIR = PROJECT_ROOT / ".snapshots"
+CHAPTERS_DIR = PROJECT_ROOT / "chapters"
+OUTPUT_DIR = PROJECT_ROOT / "output"
+
+# ============================================================
+# SAFETY CHECK — PREVENT OVERWRITING EXISTING NOVELS
+# ============================================================
+
+def check_existing_novel():
+    """Check if a completed or in-progress novel already exists.
+    
+    This is a CRITICAL safety check. If a novel exists in the project,
+    we MUST archive it before starting a new one. Otherwise we risk
+    destroying completed work.
+    
+    Returns True if safe to proceed, False if a novel exists.
+    """
+    existing = []
+    
+    # Check for chapter files
+    if CHAPTERS_DIR.exists():
+        chapter_files = list(CHAPTERS_DIR.glob("chapter_*.md"))
+        if chapter_files:
+            existing.append(f"{len(chapter_files)} chapter files in chapters/")
+    
+    # Check for EPUB
+    if OUTPUT_DIR.exists():
+        epub_files = list(OUTPUT_DIR.glob("*.epub"))
+        if epub_files:
+            existing.append(f"EPUB: {', '.join(f.name for f in epub_files)}")
+    
+    # Check state file for a title
+    if STATE_FILE.exists():
+        try:
+            with open(STATE_FILE, 'r') as f:
+                state = yaml.safe_load(f) or {}
+            title = state.get('meta', {}).get('title', '')
+            if title:
+                existing.append(f"novel_state.yaml has title: '{title}'")
+        except Exception:
+            pass
+    
+    # Check for scene files
+    if SCENES_DIR.exists():
+        scene_files = list(SCENES_DIR.glob("ch*_s*_final.md"))
+        if len(scene_files) > 2:  # Allow a couple scenes from setup
+            existing.append(f"{len(scene_files)} completed scene files")
+    
+    if existing:
+        print("\n" + "="*60)
+        print("  ⚠️  EXISTING NOVEL DETECTED")
+        print("="*60)
+        print("\nThe following existing work was found:")
+        for item in existing:
+            print(f"  • {item}")
+        print("\nYou MUST archive this novel before starting a new one.")
+        print("\nRun one of these commands first:")
+        print("  python scripts/main.py --archive    # Archive only, keep project")
+        print("  python scripts/main.py --clean      # Archive and reset for new novel")
+        print("\nOr run:  python scripts/progress.py archive")
+        print("="*60 + "\n")
+        return False
+    
+    return True
 
 # ============================================================
 # STATE MANAGEMENT
@@ -574,7 +637,6 @@ DO NOT just concatenate dialogue. Transform into a novel scene with:
 - Sensory details
 - Proper scene structure matching the beat structure
 - Natural dialogue flow — characters should feel like they're really talking
-- **NO em-dashes** (`—` or `--`) anywhere in the prose. Use commas, periods, or separate sentences.
 
 Write the complete scene. This is the RAW DRAFT — it will be checked by an auditor
 and then polished by a stylist. Focus on getting the story right.
@@ -599,7 +661,6 @@ Check for:
 2. Character voice violations (dialogue that doesn't match persona)
 3. World rule violations (magic/technology/social rules broken)
 4. Knowledge leaks (character acts on info they shouldn't have)
-5. **Em-dashes** (`—` or `--`) anywhere in the prose — flag as character_voice|minor
 
 For EACH issue found, specify:
 - Type: continuity|character_voice|world_rule|knowledge_leak
@@ -683,7 +744,6 @@ Improve the prose quality:
 3. Stitching artifacts — remove obvious joins between character contributions
 4. Show don't tell — replace stated emotions with demonstrated ones
 5. Genre tone — ensure prose matches the genre: {genre}
-6. **NO em-dashes** — remove any `—` or `--` in the prose. Use commas, periods, or separate sentences instead.
 
 HARD RULE: You may ONLY modify prose quality. Do NOT change narrative content,
 plot events, or character decisions. If narrative content needs changing,
@@ -807,6 +867,11 @@ def run_full_loop(seed, max_chapters=None, target="short_novel"):
         max_chapters: Max chapters to generate (None = use outline)
         target: Length target - novella(30k), short_novel(60k), novel(80k), epic(100k+)
     """
+    # CRITICAL: Check for existing novel before doing ANYTHING
+    if not check_existing_novel():
+        print("GENERATION ABORTED: Existing novel must be archived first.")
+        return
+    
     target_words = LENGTH_TARGETS.get(target, 60000)
     print(f"Starting novel generation with seed: {seed}")
     print(f"Target length: {target} (~{target_words:,} words, ~{target_words // 275} paperback pages)")
@@ -1012,6 +1077,11 @@ if __name__ == "__main__":
     
     if not seed:
         print("ERROR: --seed is required")
+        sys.exit(1)
+    
+    # CRITICAL: Check for existing novel before generation
+    if not check_existing_novel():
+        print("\nABORTING: Please archive the existing novel first.")
         sys.exit(1)
     
     if target not in LENGTH_TARGETS:

@@ -1,7 +1,7 @@
 ---
 name: novel-generator
 description: "Generate full novels using a multi-agent pipeline (Orchestrator, Storyteller/DM, Character Agents, Lore Auditor, Prose Stylist). Scene Sandbox model: characters generate independent strategies, Storyteller weaves them into prose, then voice-check pass. Targeted revision, state accumulation with versioned validation. Repeatable — archive old novels and start fresh."
-version: 2.4.0
+version: 2.2.0
 author: rwcrosk-arch
 license: MIT
 dependencies: []
@@ -84,21 +84,34 @@ For each scene (~10 agent calls each with Scene Sandbox, ~5 for single-character
    - **Lore Auditor** → final chapter-level continuity check
    - **Snapshot** state (with version increment)
 
-## Progress Tracking
+## Dashboard
 
-A `PROGRESS.md` file in `novel_project/` updates after every scene. It shows:
+The web dashboard (`scripts/dashboard.py`) shows live progress and serves on port 8420:
 
-- Current chapter/scene and pipeline stage
-- Word count vs. target
-- Completion percentage
-- Flagged issues
-- Per-chapter status
+```bash
+python3 scripts/dashboard.py           # Live server on :8420
+python3 scripts/dashboard.py --static  # Generate dashboard.html
+```
 
-Read `PROGRESS.md` anytime to check status. The main loop updates it automatically.
+Features:
+- **Scene links**: Each completed scene links to its draft file (`/files/scenes/chXX_sYY_draft.md`). Click to read the raw prose.
+- **Chapter links**: Each chapter header links to the assembled chapter (`/files/chapters/chapter_XX.md`).
+- **EPUB download**: "Download EPUB" button appears when the EPUB exists.
+- **Cover thumbnail**: Shows the generated cover image.
+- **Auto-refresh**: Polls `/api/status` every 10 seconds.
+- **Completion celebration**: When `meta.status == "complete"`, shows ✨ COMPLETE ✨ with green progress bars.
 
-The web dashboard (`scripts/dashboard.py`) serves on port 8420 or generates static HTML via `--static`. **Critical:** PyYAML must be installed (`pip install pyyaml`) or dashboard/progress scripts silently return empty data. The static dashboard embeds JSON via `<script type="application/json">` tags — do NOT embed JSON directly in JS string literals or it breaks on special characters.
+The dashboard also serves files via `/files/<path>` — scenes, chapters, cover images, and EPUB are all directly accessible.
 
 ## Archiving / Starting a New Novel
+
+**CRITICAL: The pipeline WILL NOT start if existing work is detected.** Before generating any novel, `check_existing_novel()` scans for:
+- `chapters/chapter_*.md` files
+- `output/*.epub` files
+- `novel_state.yaml` with a title set
+- `scenes/ch*_s*_final.md` files (more than 2)
+
+If ANY of these are found, generation is **ABORTED** with an explicit message demanding archive. This prevents accidentally overwriting completed work.
 
 To archive the current novel and start fresh:
 
@@ -118,6 +131,10 @@ After `--clean`, run a new novel with:
 ```bash
 python3 scripts/main.py --seed "Your new concept" --target short_novel
 ```
+
+### Why This Safety Check Exists
+
+In production, a completed 182,519-word novel (`The_Hollow_Stars.epub`, 20 chapters) was nearly destroyed when a new generation started without archiving. The `novel_state.yaml` was overwritten, scenes were partially clobbered, and only the `chapters/` directory and EPUB survived because they were in separate directories. **Always archive before starting a new novel. The safety check enforces this.**
 
 ## File Structure
 
@@ -169,6 +186,31 @@ novel_project/
 - **Characters can enter/exit mid-scene:** The `characters_entering` and `characters_exiting` fields support mid-scene arrivals and departures.
 - **Context overflow guardrail:** Before spawning any agent, estimate context size. If over ~6K tokens: truncate profiles, drop voice examples, drop world rules, flag for human review.
 - **No Orchestrator Auditor role:** Previously a 6th role with subjective ratings and no enforcement. Its functions merged into Orchestrator and Lore Auditor. Five roles instead of six.
+- **Overwrite safety check (CRITICAL):** Before ANY generation starts, `check_existing_novel()` scans the project for existing work. If found, generation aborts with a clear message. This runs in BOTH `run_full_loop()` (the orchestrated path) and `__main__` (the CLI path). The check looks at: chapter files, EPUB files, state file title, and completed scene files. Without this, completed novels can be silently destroyed when a new seed is processed.
+
+  **Implementation pattern (in `scripts/main.py`):**
+  ```python
+  def check_existing_novel():
+      existing = []
+      if CHAPTERS_DIR.exists() and list(CHAPTERS_DIR.glob("chapter_*.md")):
+          existing.append("chapter files")
+      if OUTPUT_DIR.exists() and list(OUTPUT_DIR.glob("*.epub")):
+          existing.append("EPUB files")
+      if STATE_FILE.exists():
+          state = yaml.safe_load(STATE_FILE.read_text()) or {}
+          if state.get('meta', {}).get('title'):
+              existing.append(f"state file: '{state['meta']['title']}'")
+      if SCENES_DIR.exists() and len(list(SCENES_DIR.glob("ch*_s*_final.md"))) > 2:
+          existing.append("completed scene files")
+      if existing:
+          print("EXISTS:", existing)
+          return False
+      return True
+  
+  # In run_full_loop() and __main__:
+  if not check_existing_novel():
+      sys.exit("Archive existing novel first: python scripts/main.py --archive")
+  ```
 - **No em-dashes — triple-gate enforcement:** Emdashes are banned in all narrative prose. Enforced at three gates: (1) Storyteller prompt has a hard "NO em-dashes" constraint at write-time, (2) Prose Stylist actively removes any that slipped through at polish-time (check #8 + sanity check), (3) Lore Auditor scans for em-dashes and flags them as `character_voice|minor` at audit-time. This pattern works for any style constraint that must survive multiple agent handoffs.
 
 ## Troubleshooting
@@ -176,6 +218,7 @@ novel_project/
 | Problem | Solution |
 |---------|----------|
 | Agent produces garbage | Retry (max 2). If still broken, flag scene and continue. |
+| **Existing novel overwritten** | **Never start a new novel without archiving.** The safety check blocks this, but if bypassed: restore from `novel_archive/<title>_<timestamp>/`. The `chapters/` and `output/` dirs survive overwrites because they're in separate directories from `scenes/` and `novel_state.yaml`. |
 | Auditor + Storyteller deadlock | After 3 revisions, save with `ISSUES:` header. Orchestrator decides. |
 | Character goes off-rails | Discard response. Re-run with stronger constraints + negative example. |
 | Context overflow | Profiles are truncated; chapters >2 back use summaries only. ~4.5K token budget. |
@@ -248,82 +291,6 @@ Write complete chapter with scene breaks (***). Save to [path].
 | 16-20 | ~35K tokens | ~400K+ tokens |
 
 The inline approach scales linearly. The file-reading approach scales exponentially.
-
-**Validated at scale:** This pattern successfully generated 17 consecutive chapters (Ch4-20 of a 20-chapter hard sci-fi novel, 182K words) with consistent quality, no em-dashes, and coherent continuity. Average chapter length: 8,500 words. Each subagent call completed in 2-4 minutes.
-
-### Resuming After Interruption / State Reconciliation
-
-When a novel generation is paused and resumed (context compression, session end, long gaps), `novel_state.yaml` often drifts from the actual filesystem state. **Never assume the state file is accurate.** Always reconcile before continuing.
-
-**Common drift patterns:**
-- Chapter files exist in `chapters/` but are missing from `state["chapters"]`
-- `meta.current_chapter` is stale (e.g., still points to Ch3 when Ch1-3 are all complete)
-- `meta.status` is still `"drafting"` when all chapters exist
-- `summaries.chapter_summaries` is missing entries for completed chapters
-- Character `growth.current_state` describes a chapter that was completed sessions ago
-
-**Pre-flight reconciliation checklist (run before generating the next chapter):**
-
-1. **Scan filesystem vs. state:**
-   ```python
-   import os, glob
-   ch_files = sorted(glob.glob('chapters/chapter_*.md'))
-   state_chapters = state.get('chapters', [])
-   print(f'Files on disk: {len(ch_files)}, Tracked in state: {len(state_chapters)}')
-   ```
-
-2. **If chapters exist on disk but not in state:**
-   - Read each missing chapter file
-   - Count scenes (`grep "^## Scene"` or split on `***`)
-   - Add the chapter entry to `state["chapters"]` with `status: "complete"`
-   - Add a summary to `state["summaries"]["chapter_summaries"]`
-   - Update character `growth.current_state` to match the chapter's ending
-
-3. **Update meta:**
-   - `meta.current_chapter` = next chapter to generate (last complete + 1)
-   - `meta.current_scene` = 1
-   - `meta.last_modified` = current timestamp
-   - `meta.state_version` += 1
-
-4. **Verify character ages and states:**
-   - For novels spanning years, calculate each character's current age based on elapsed time
-   - Update `growth.current_state` to reflect where they are NOW, not where they were at the last saved state
-   - This is especially critical when resuming after context compression
-
-5. **If ALL chapters are complete:**
-   - Set `meta.status = "complete"`
-   - Run publishing pipeline (cover + EPUB)
-   - Do NOT skip this step; the dashboard and completion checks depend on it
-
-**Why this matters:** If you skip reconciliation and generate Ch4 while the state still thinks you're on Ch3, the inline context block will describe a world state from two chapters ago. Characters will reference events that haven't happened, or fail to reference events that have. Continuity breaks immediately.
-
-**Example of drift from this session:**
-- Files existed: `chapters/chapter_01.md`, `chapter_02.md`, `chapter_03.md`
-- State claimed: only 2 chapters tracked, `current_chapter: 3`
-- Ch3 was NOT in `state["chapters"]` at all
-- `summaries.chapter_summaries` only had entries for Ch1-2
-- Fix required: manually add Ch3 entry, update character states, set `current_chapter: 4`
-
-### Reviewing Scripts for Personal Artifacts
-
-Before sharing or publishing a skill, review all generated scripts for personal branding, test data, or hardcoded values from previous novels:
-
-| Artifact Type | Example | Fix |
-|---------------|---------|-----|
-| Pet names / mascots | `"Neko-chan was here"`, cat emojis in UI | Replace with neutral text |
-| Hardcoded novel titles | `The_Apothecarys_Second_Life.epub` as default filename | Derive from `meta.title` dynamically |
-| Hardcoded author names | `"by Farekrow"` as default overlay text | Use `meta.author` or prompt for it |
-| Test comments | `print("DEBUG: lol")` | Remove or convert to proper logging |
-| Local paths | `/home/ross/...` in error messages | Use relative paths or `PROJECT_ROOT` |
-
-**Pattern for dynamic title/author:**
-```python
-import re
-safe_title = re.sub(r'[^\w\s-]', '', meta.get("title", "Novel")).strip().replace(' ', '_')
-epub_path = PROJECT_ROOT / "output" / f"{safe_title}.epub"
-```
-
-**Don't forget the import:** If you add `re.sub()` to a script that didn't previously use regex, you MUST add `import re`. The dashboard's static generation will fail with `NameError` otherwise.
 
 ### Practical Generation Flow (What Actually Happens)
 
@@ -400,44 +367,6 @@ For each chapter, run these steps in order:
     - Save chapter to `output/chapter_XX.md`
     - Snapshot state to `.snapshots/`
 
-11. **Automated Publishing** (after all chapters complete)
-    - Run `publish.py --all` to generate cover, overlay title, assemble EPUB
-    - Dashboard auto-detects published EPUB and cover image
-    - Static dashboard regeneration includes download links
-    - Scenes and chapters in dashboard are clickable links for preview
-
-### Automated Publishing Workflow
-
-When `meta.status` is set to `"complete"`, the publishing pipeline should run automatically:
-
-```bash
-cd novel_project
-# Full pipeline: cover generation + title overlay + EPUB assembly
-python3 scripts/publish.py --all
-
-# Or step by step:
-python3 scripts/generate_cover.py --seed 42      # AI cover
-python3 scripts/publish.py --overlay-only        # Title overlay
-python3 scripts/publish.py --epub-only           # EPUB assembly
-
-# Regenerate dashboard to show published assets
-python3 scripts/dashboard.py --static
-```
-
-The dashboard automatically detects published assets:
-- **EPUB download button** appears when `output/*.epub` exists
-- **Cover thumbnail** appears when `publish/cover_final.jpg` exists
-- Both are served via `/download/epub` and `/files/publish/` routes
-- The EPUB filename is derived from `meta.title` in `novel_state.yaml`
-
-### Scene & Chapter Preview Links
-
-The dashboard renders every scene and chapter as clickable links:
-- **Scenes**: Click "Sc N" to open the scene draft markdown in a new tab
-- **Chapters**: Click the chapter title to open the assembled chapter markdown
-- Links are served via `/files/scenes/chXX_sYY_draft.md` and `/files/chapters/chapter_XX.md`
-- This works in both live server mode and static HTML mode
-
 ### Novel Completion
 
 When the last chapter is generated, three things must happen that are easy to forget:
@@ -505,40 +434,39 @@ Inline in state: brief, validation status, audit results, stylist notes, adjudic
 
 Once the novel is marked `meta.status: "complete"`, run the publishing pipeline to generate a cover image and EPUB:
 
-### 1. Generate Cover Image
+## Cover Generation (Dynamic — Reads from State)
+
+The cover generator (`scripts/generate_cover.py`) reads `novel_state.yaml` to determine the genre and themes, then builds an appropriate prompt automatically. **No hardcoded prompts.**
+
+- Sci-fi novels get: seedship, EVAC suits, AI spheres, shattered planets, deep space
+- Fantasy novels get: medieval settings, magical elements, adventurers
+- The prompt is built from `meta.genre` and `meta.seed` fields in the state file
 
 ```bash
 cd novel_project
 python3 scripts/generate_cover.py --seed 42
 ```
 
-- Uses AnimagineXL 3.1 (SDXL anime model) via `diffusers` directly — NOT ComfyUI API (which has BrokenPipeError with tqdm in subprocess mode)
+- Uses AnimagineXL 3.1 (SDXL anime model) via `diffusers` directly
 - Output: `publish/cover_raw.png` (1024×1536, 2:3 light novel ratio)
 - RTX 3070 Ti: ~48 seconds with sequential CPU offloading
 - Options: `--seed N`, `--prompt "custom prompt"`, `--output PATH`
 - **Must kill ComfyUI before generating** (`pkill -f comfyui`) — it holds 6+ GB VRAM
-- If OOM: reduce to 768×1152 or add `--cpu` flag
 
-### 2. Overlay Title + Author on Cover
+### Publishing Pipeline (Dynamic Metadata)
 
-```bash
-python3 scripts/publish.py --overlay-only
-```
-
-- Renders "The Apothecary's Second Life" (title) + "by Farekrow" (author)
-- Dark gradient overlays at top/bottom for text readability
-- Uses DejaVu Sans Bold (install: `sudo dnf install dejavu-sans-fonts`)
-- Outputs: `publish/cover_final.png` and `publish/cover_final.jpg`
-
-### 3. Assemble EPUB
+The publishing pipeline (`scripts/publish.py`) reads title, author, and genre from `novel_state.yaml`. **No hardcoded defaults.**
 
 ```bash
-python3 scripts/publish.py --epub-only
+python3 scripts/publish.py --all     # Full pipeline: cover → title overlay → EPUB
+python3 scripts/publish.py --overlay-only   # Just overlay title on existing cover
+python3 scripts/publish.py --epub-only      # Just assemble EPUB from chapters
 ```
 
-- Collects all `chapters/chapter_*.md`, converts markdown to styled HTML
-- Embeds cover image, table of contents, serif font stylesheet
-- Output: `output/The_Apothecarys_Second_Life.epub`
+- Title and author are loaded from `novel_state.yaml` automatically
+- EPUB filename is derived from `meta.title` (e.g., `The_Hollow_Stars.epub`)
+- Cover embeds the correct title from state
+- To override: `--title "Custom Title" --author "Name"`
 
 ### 4. Full Pipeline (All Steps)
 
@@ -553,15 +481,6 @@ The dashboard automatically detects published assets:
 - **Cover thumbnail** displayed alongside the download card
 - Both served via the `/files/publish/` and `/download/epub` routes
 - Regenerate static dashboard after publishing: `python3 scripts/dashboard.py --static`
-- **EPUB filename** is derived from `meta.title` in `novel_state.yaml`, not hardcoded
-
-### Scene & Chapter Preview Links
-
-The dashboard renders clickable preview links for all content:
-- **Scenes**: Click "Sc N" to open `scenes/chXX_sYY_draft.md` in a new tab
-- **Chapters**: Click the chapter title to open `chapters/chapter_XX.md`
-- Links are served via the `/files/` route in both live and static modes
-- This allows reviewing any scene or chapter directly from the dashboard
 
 ### Publishing Troubleshooting
 
@@ -579,10 +498,6 @@ The dashboard renders clickable preview links for all content:
 | Cover not showing as Page 1 | Create manual `EpubHtml` cover page + add as FIRST item in `book.spine`. `set_cover(create_page=True)` does NOT add to spine |
 | Duplicate cover image warning | `set_cover()` already adds the image file; don't add a separate `EpubItem` for it |
 | Dashboard shows 2x word count | `count_total_words()` was counting both `scenes/` and `chapters/`. Only count `chapters/` (assembled prose), not intermediate scene drafts |
-| Dashboard `NameError: name 're' is not defined` | Add `import re` to `dashboard.py`. Dynamic EPUB filename derivation from `meta.title` requires it |
-| EPUB has wrong title/author | `publish.py --all` uses hardcoded defaults if `--title` and `--author` are not passed explicitly. Always pass: `python3 scripts/publish.py --all --title "Your Title" --author "Your Name"` |
-| State file says "drafting" but all chapters exist | Run reconciliation (see "Resuming After Interruption" section). Set `meta.status = "complete"` manually if all chapters are verified done |
-| Scripts contain personal branding | Review all scripts for pet names, emojis, hardcoded titles from previous novels. See "Reviewing Scripts for Personal Artifacts" section |
 
 ### Prerequisites
 

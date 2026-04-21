@@ -11,6 +11,68 @@ import argparse
 import os
 import sys
 
+def load_state():
+    """Load novel state from YAML to get title, genre, themes."""
+    try:
+        import yaml
+        state_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "novel_state.yaml")
+        if os.path.exists(state_file):
+            with open(state_file, 'r', encoding='utf-8') as f:
+                return yaml.safe_load(f) or {}
+    except ImportError:
+        pass
+    return {}
+
+
+def build_cover_prompt_from_state(state):
+    """Build a cover generation prompt from the novel's actual metadata.
+    
+    This ensures the cover matches the CURRENT story, not a hardcoded default.
+    """
+    meta = state.get("meta", {})
+    title = meta.get("title", "Untitled Novel")
+    genre = meta.get("genre", "fiction").lower()
+    seed = meta.get("seed", "")
+    
+    # Determine genre-specific art direction
+    if "sci-fi" in genre or "science fiction" in genre or "scifi" in genre:
+        base = (
+            "science fiction book cover illustration, cinematic, dramatic lighting, "
+            "deep space background with distant stars and nebulae, "
+        )
+        # Parse seed for specific imagery
+        if "seedship" in seed.lower() or "arkadia" in seed.lower() or "sanctuary" in seed.lower():
+            base += (
+                "a massive cylindrical seedship drifting through the void, "
+                "small human figure in EVAC suit for scale, "
+                "translucent glowing AI sphere floating nearby, "
+                "hull covered in ice and radiation scoring, "
+            )
+        if "destroy" in seed.lower() or "apocalypse" in seed.lower():
+            base += "shattered planet debris in the distance, "
+        if "ai" in seed.lower() or "artificial intelligence" in seed.lower():
+            base += "ominous blue-white holographic glow suggesting AI presence, "
+        base += (
+            "detailed sci-fi art style, cinematic composition, "
+            "high contrast, cold blue and warm amber color palette, "
+            "high quality, masterpiece, book cover composition"
+        )
+    elif "fantasy" in genre or "isekai" in genre:
+        base = (
+            "fantasy light novel cover illustration, a young adventurer, "
+            "medieval fantasy setting with magical elements, "
+            "detailed anime art style, vibrant colors, dramatic lighting, "
+            "high quality, masterpiece, light novel cover composition"
+        )
+    else:
+        base = (
+            "book cover illustration, dramatic, cinematic lighting, "
+            "detailed art style, high quality, masterpiece, book cover composition"
+        )
+    
+    return base
+
+
 def generate_cover(seed=42, output_path=None, custom_prompt=None):
     import torch
     from diffusers import StableDiffusionXLPipeline
@@ -23,18 +85,9 @@ def generate_cover(seed=42, output_path=None, custom_prompt=None):
         output_path = os.path.join(PROJECT_ROOT, "publish", "cover_raw.png")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    prompt = custom_prompt or (
-        "anime light novel cover illustration, a young man with dark brown hair and green eyes "
-        "wearing a worn leather apron over simple medieval clothes, standing inside a warm "
-        "apothecary shop, shelves lined with glowing potion bottles of various colors, "
-        "mortar and pestle on a wooden workbench, herbs hanging from the ceiling, "
-        "magical blue sparkles floating in the air around his hands, "
-        "a silver-haired companion with green eyes sitting on the shop counter watching him with curiosity, "
-        "warm golden candlelight streaming through the window, "
-        "medieval fantasy village visible outside, "
-        "detailed anime art style, vibrant warm colors, dramatic lighting from the potions, "
-        "high quality, masterpiece, best quality, light novel cover composition"
-    )
+    # Load state and build prompt from actual novel metadata
+    state = load_state()
+    prompt = custom_prompt or build_cover_prompt_from_state(state)
 
     neg_prompt = (
         "low quality, worst quality, bad anatomy, bad hands, missing fingers, "
