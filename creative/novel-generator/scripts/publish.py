@@ -13,7 +13,30 @@ import argparse
 import os
 import re
 import sys
-import textwrap
+import re, textwrap
+# Regex matching Unicode box-drawing chars (Ch1-2 style ╔═╗ type)
+BOX_DRAWING_RE = re.compile(
+    r'[\u2500-\u257F'          # Box Drawing
+    r'\u2580-\u259F'           # Block Elements
+    r'╔╗╚╝═║╠╣╦╩'             # Double-line box chars
+    r']'
+)
+# Chapters 3-12 use ASCII table style:  +------+  and  | text |
+ASCII_TABLE_BORDER_RE = re.compile(r'^(\+[\-+]+\+)$')
+ASCII_TABLE_PIPE_RE = re.compile(r'^(\|.*\|)$')
+
+
+def _is_uniform_symbol_line(s):
+    """A line of 10+ chars that is 80%+ the same symbol (= - * # ~)."""
+    if len(s) < 10:
+        return False
+    for ch in ('=', '-', '*', '#', '~'):
+        ratio = s.count(ch) / len(s)
+        if ratio >= 0.8:
+            return True
+    return False
+
+
 from pathlib import Path
 
 try:
@@ -408,6 +431,23 @@ em { font-style: italic; }
 .first-para {
     text-indent: 0;
 }
+
+/* ASCII art stat boxes — preserve monospace spacing */
+pre.ascii-art {
+    font-family: "DejaVu Sans Mono", "Libertinus Mono", "Courier New", monospace;
+    font-size: 0.85em;
+    line-height: 1.2;
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 1em;
+    margin: 1em auto;
+    text-align: center;
+    white-space: pre;
+    overflow-x: auto;
+    color: #222;
+    max-width: 95%;
+}
 """
 
 
@@ -417,21 +457,83 @@ def markdown_to_html(text):
     Returns ONLY the inner body markup — no <html>, <head>, or <body> tags.
     ebooklib handles the document wrapper.
 
-    Handles: headings, paragraphs, emphasis, bold, dialogue, scene breaks.
+    Handles: headings, paragraphs, emphasis, bold, dialogue, scene breaks,
+             ASCII art blocks (surrounded by blank lines, kept in <pre>).
     """
     lines = text.split("\n")
     parts = []
 
     in_paragraph = False
-
-    for line in lines:
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         stripped = line.strip()
+
+        # ── ASCII art block detection ─────────────────────────────────
+        # Handles all stat box styles used across chapters:
+        #   Style A (Unicode): ╔════════════════╗  Chapters 1-2
+        #   Style B (ASCII):   +----------------+  Chapters 3-12
+        #                      | Content        |
+        #   Style C (= bars):  ================   Chapters 12
+        def _is_any_art_line(text, idx):
+            s = text.strip()
+            if not s:
+                return False
+            return bool(
+                BOX_DRAWING_RE.search(s)
+                or ASCII_TABLE_BORDER_RE.match(s)
+                or ASCII_TABLE_PIPE_RE.match(s)
+                or _is_uniform_symbol_line(s)
+                or (s == '+' and idx + 1 < len(lines)
+                    and (ASCII_TABLE_BORDER_RE.match(lines[idx+1].strip())
+                         or _is_uniform_symbol_line(lines[idx+1].strip())))
+            )
+
+        if stripped and _is_any_art_line(line, i):
+            if in_paragraph:
+                parts.append("</p>")
+                in_paragraph = False
+            art_lines = []
+            # Determine block style
+            started_with_separator = _is_uniform_symbol_line(stripped)
+            started_with_table = bool(ASCII_TABLE_BORDER_RE.match(stripped))
+            # Capture indentation of the first line (to preserve consistent blocks)
+            start_indent = len(line) - len(line.lstrip())
+            while i < len(lines):
+                l2 = lines[i]
+                s2 = l2.strip()
+                if not s2:
+                    break
+                if _is_any_art_line(l2, i):
+                    art_lines.append(html_escape(l2.rstrip()))
+                    i += 1
+                    continue
+                inside_table_block = started_with_table and s2.startswith('|')
+                inside_separator_block = (
+                    started_with_separator
+                    and (len(l2) - len(l2.lstrip())) >= start_indent
+                    and (
+                        s2.startswith('[')                     # [ HEADER ]
+                        or s2.startswith('-')                    # - List item
+                        or ':' in s2[:40]                        # Label: value
+                        or _is_uniform_symbol_line(s2)             # Another bar
+                    )
+                )
+                if inside_table_block or inside_separator_block:
+                    art_lines.append(html_escape(l2.rstrip()))
+                    i += 1
+                    continue
+                break
+            if art_lines:
+                parts.append('<pre class="ascii-art">' + "\n".join(art_lines) + '</pre>')
+            continue
 
         # Empty line = paragraph break
         if not stripped:
             if in_paragraph:
                 parts.append("</p>")
                 in_paragraph = False
+            i += 1
             continue
 
         # Scene break: ---, ***, - - -, etc.
@@ -440,6 +542,7 @@ def markdown_to_html(text):
                 parts.append("</p>")
                 in_paragraph = False
             parts.append('<div class="scene-break">* * *</div>')
+            i += 1
             continue
 
         # Heading level 3
@@ -448,6 +551,7 @@ def markdown_to_html(text):
                 parts.append("</p>")
                 in_paragraph = False
             parts.append(f"<h3>{html_escape(stripped[4:])}</h3>")
+            i += 1
             continue
 
         # Heading level 2
@@ -456,6 +560,7 @@ def markdown_to_html(text):
                 parts.append("</p>")
                 in_paragraph = False
             parts.append(f"<h2>{html_escape(stripped[3:])}</h2>")
+            i += 1
             continue
 
         # Heading level 1
@@ -464,6 +569,7 @@ def markdown_to_html(text):
                 parts.append("</p>")
                 in_paragraph = False
             parts.append(f"<h1>{html_escape(stripped[2:])}</h1>")
+            i += 1
             continue
 
         # Regular text line — process inline formatting
@@ -475,6 +581,7 @@ def markdown_to_html(text):
         else:
             # Continuation of same paragraph — join with space
             parts.append(f" {processed}")
+        i += 1
 
     # Close any open paragraph
     if in_paragraph:
@@ -672,9 +779,21 @@ def assemble_epub(cover_path=None, title=None, author=None):
         # Extract title from first line (# Title)
         lines = content.strip().split("\n")
         ch_title = f"Chapter {ch_num}"
-        if lines and lines[0].startswith("#"):
-            ch_title = lines[0].lstrip("#").strip()
-            content = "\n".join(lines[1:]).strip()
+        if lines:
+            # Find first non-empty line
+            first_line = ""
+            first_idx = -1
+            for idx, ln in enumerate(lines):
+                if ln.strip():
+                    first_line = ln.strip()
+                    first_idx = idx
+                    break
+            if first_line.startswith("#"):
+                ch_title = first_line.lstrip("#").strip()
+                content = "\n".join(lines[first_idx + 1:]).strip()
+            elif re.match(r'^Chapter\s+\d+', first_line, re.IGNORECASE):
+                ch_title = first_line
+                content = "\n".join(lines[first_idx + 1:]).strip()
 
         # Convert markdown to XHTML body content
         html_body = markdown_to_html(content)
